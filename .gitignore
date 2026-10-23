@@ -1,0 +1,11 @@
+# Local secrets
+.env
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Local tooling
+.DS_Store
+*.log

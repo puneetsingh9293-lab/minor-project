@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+fastembed
+scikit-learn
+joblib
+numpy
+pandas
+google-genai
+python-dotenv
+reportlab
