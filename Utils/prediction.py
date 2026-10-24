@@ -1,7 +1,19 @@
 import os
 import joblib
 import pandas as pd
+import sklearn.compose._column_transformer as _column_transformer
 from Utils.feature_generation import generate_ml_features, FEATURES
+
+
+# The saved preprocessor was created with a scikit-learn version that stored
+# ColumnTransformer remainder columns in this internal list subclass. Newer
+# scikit-learn releases removed it, so provide the compatible list type before
+# unpickling the existing model artifact.
+if not hasattr(_column_transformer, "_RemainderColsList"):
+    class _RemainderColsList(list):
+        pass
+
+    _column_transformer._RemainderColsList = _RemainderColsList
 
 BASE_DIR = os.path.dirname(
     os.path.dirname(os.path.abspath(__file__))

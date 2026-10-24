@@ -2,10 +2,11 @@ fastapi
 uvicorn
 streamlit
 fastembed
-scikit-learn
+scikit-learn==1.5.0
 joblib
 numpy
 pandas
 google-genai
 python-dotenv
-reportlab
+reportlab<5
+pillow<11

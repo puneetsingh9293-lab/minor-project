@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import copy
 import hashlib
 import re
 import textwrap
+from concurrent.futures import ThreadPoolExecutor
 import streamlit as st
 import streamlit.components.v1 as components
 from html import escape
@@ -332,6 +335,53 @@ def reset_and_go_to_input():
     for key, value in defaults.items():
         st.session_state[key] = copy.deepcopy(value)
     st.session_state.page = "input"
+
+
+# =========================================================
+# CACHED ANALYSIS
+# Local retrieval runs concurrently. Completed API-backed results are cached
+# for one hour, which makes a repeated idea or a browser refresh instant.
+# =========================================================
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def run_initial_analysis(startup_description: str):
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        failures_future = executor.submit(
+            retrieve_similar_failures, startup_description, top_k=5
+        )
+        indian_future = executor.submit(
+            retrieve_similar_indian_startups, startup_description, top_k=5
+        )
+        failure_results = failures_future.result()
+        indian_startups = indian_future.result()
+
+    prediction_result = predict_startup_success(
+        startup_description,
+        failure_results=failure_results,
+        indian_startups=indian_startups,
+    )
+    concept_data = generate_concept_and_risks(
+        startup_description,
+        prediction_result,
+        failure_results,
+        indian_startups,
+    )
+    return failure_results, indian_startups, prediction_result, concept_data
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def build_detailed_plan(
+    startup_description: str,
+    prediction_result: dict,
+    failure_results: list,
+    indian_startups: list,
+):
+    return generate_detailed_plan(
+        startup_description,
+        prediction_result,
+        failure_results,
+        indian_startups,
+    )
 
 
 # =========================================================
@@ -1308,24 +1358,12 @@ elif st.session_state.page == "overview":
     if not st.session_state.concept_data or not st.session_state.prediction_result:
         with st.spinner("Matching your idea against past startups and scoring it..."):
             try:
-                # 1. Retrieval
-                st.session_state.failure_results = retrieve_similar_failures(desc, top_k=5)
-                st.session_state.indian_startups = retrieve_similar_indian_startups(desc, top_k=5)
-
-                # 2. Prediction
-                st.session_state.prediction_result = predict_startup_success(
-                    desc,
-                    failure_results=st.session_state.failure_results,
-                    indian_startups=st.session_state.indian_startups,
-                )
-
-                # 3. Concept enhancement and risk synthesis
-                st.session_state.concept_data = generate_concept_and_risks(
-                    desc,
-                    st.session_state.prediction_result,
+                (
                     st.session_state.failure_results,
                     st.session_state.indian_startups,
-                )
+                    st.session_state.prediction_result,
+                    st.session_state.concept_data,
+                ) = run_initial_analysis(desc)
             except Exception as e:
                 st.error(f"The analysis stopped: {e}")
                 st.stop()
@@ -1473,7 +1511,7 @@ elif st.session_state.page == "detailed_plan":
     if not st.session_state.plan_data:
         with st.spinner("Building your roadmap, skills list and team plan..."):
             try:
-                st.session_state.plan_data = generate_detailed_plan(
+                st.session_state.plan_data = build_detailed_plan(
                     st.session_state.startup_description,
                     st.session_state.prediction_result,
                     st.session_state.failure_results,

@@ -131,7 +131,9 @@ Return strictly valid raw JSON. No markdown backticks, no conversational text.
     )
 
     for model_name in PRIMARY_MODELS:
-        for attempt in range(3):
+        # Keep the interactive path responsive: one retry for a temporary
+        # overload, then move to the next compatible model or safe fallback.
+        for attempt in range(2):
             try:
                 response = client.models.generate_content(
                     model=model_name,
@@ -153,10 +155,12 @@ Return strictly valid raw JSON. No markdown backticks, no conversational text.
 
                 return inferred
             except ServerError:
-                time.sleep(2.0 * (attempt + 1))
+                if attempt == 0:
+                    time.sleep(1.0)
             except ClientError:
                 break
             except Exception:
-                time.sleep(1.0)
+                if attempt == 0:
+                    time.sleep(0.5)
 
     return _get_fallback_features()

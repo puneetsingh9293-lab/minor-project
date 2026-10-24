@@ -1,6 +1,7 @@
 import os
 import json
 import time
+from functools import lru_cache
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -26,6 +27,7 @@ if not API_KEY:
 client = genai.Client(api_key=API_KEY)
 
 
+@lru_cache(maxsize=128)
 def call_gemini_with_fallback(prompt: str) -> str:
     """
     Executes generate_content across valid model candidates with retry
@@ -39,7 +41,9 @@ def call_gemini_with_fallback(prompt: str) -> str:
     last_error = None
 
     for model_name in PRIMARY_MODELS:
-        for attempt in range(3):
+        # A long retry chain makes the UI feel frozen. Try each candidate once,
+        # then retry it once after a short delay only for temporary overload.
+        for attempt in range(2):
             try:
                 response = client.models.generate_content(
                     model=model_name,
@@ -51,14 +55,16 @@ def call_gemini_with_fallback(prompt: str) -> str:
             except ServerError as e:
                 # 503 temporary high demand - wait and retry
                 last_error = e
-                time.sleep(2.0 * (attempt + 1))
+                if attempt == 0:
+                    time.sleep(1.0)
             except ClientError as e:
                 # 404 or unsupported - skip immediately to next model
                 last_error = e
                 break
             except Exception as e:
                 last_error = e
-                time.sleep(1.0)
+                if attempt == 0:
+                    time.sleep(0.5)
 
     raise RuntimeError(f"All Gemini model candidates failed. Last error: {last_error}")
 
